@@ -8,10 +8,22 @@ from collections import OrderedDict
 import json
 import math
 import os
+import textwrap
 from typing import List, Dict
 import mysql.connector
 
-def retrieve_all_shows(database_connection: mysql.connector.connect) -> Dict:
+MONTHS = ["January", "February", "March", "April",
+          "May", "June", "July", "August",
+          "September", "October", "November", "December"
+          ]
+
+MONTH_NUMBER_OF_DAYS = [31, 29, 31, 30,
+                        31, 30, 31, 31,
+                        30, 31, 30, 31
+                        ]
+
+def retrieve_all_shows(database_connection: mysql.connector.connect,
+                       max_year: int = 2020) -> Dict:
     """..."""
     all_show_dates = OrderedDict()
     regular_show_dates = OrderedDict()
@@ -22,9 +34,9 @@ def retrieve_all_shows(database_connection: mysql.connector.connect) -> Dict:
 
     cursor = database_connection.cursor(dictionary=True)
     query = ("SELECT s.showdate, s.bestof, s.repeatshowid FROM ww_shows s "
-             "WHERE YEAR(s.showdate) < 2020 "
+             "WHERE YEAR(s.showdate) <= %s "
              "ORDER BY s.showdate ASC;")
-    cursor.execute(query)
+    cursor.execute(query, (max_year,))
     result = cursor.fetchall()
 
     if not result:
@@ -32,12 +44,13 @@ def retrieve_all_shows(database_connection: mysql.connector.connect) -> Dict:
 
     for show in result:
         show_date = show["showdate"]
+
         if show_date.day not in all_show_dates[show_date.month]:
             all_show_dates[show_date.month].append(show_date.day)
 
-            if not show["bestof"]:
-                if show_date.day not in regular_show_dates[show_date.month]:
-                    regular_show_dates[show_date.month].append(show_date.day)
+        if not show["bestof"] and not show["repeatshowid"]:
+            if show_date.day not in regular_show_dates[show_date.month]:
+                regular_show_dates[show_date.month].append(show_date.day)
 
     for month in all_show_dates:
         all_show_dates[month].sort()
@@ -59,7 +72,39 @@ def main():
     app_environment = os.getenv("APP_ENV", "local").strip().lower()
     config = load_config(app_environment)
     database_connection = mysql.connector.connect(**config["database"])
-    retrieve_all_shows(database_connection)
+    all_show_dates, regular_show_dates = retrieve_all_shows(database_connection)
+
+    print("All Shows")
+    print("=========\n")
+    for month in all_show_dates:
+        print(MONTHS[month - 1])
+        print("")
+        days = " ".join("{:<3}".format(day) for day in all_show_dates[month])
+        for line in textwrap.wrap(days, 30):
+            print(line)
+
+        print("")
+        print("Days in {}: {}".format(MONTHS[month - 1],
+                                      MONTH_NUMBER_OF_DAYS[month - 1]))
+        print("Show days in {}: {}\n".format(MONTHS[month -1],
+                                             len(all_show_dates[month])))
+
+    print("")
+    print("Regular Shows")
+    print("=============\n")
+    for month in regular_show_dates:
+        print(MONTHS[month - 1])
+        print("")
+        days = " ".join("{:<3}".format(day) for day in regular_show_dates[month])
+        for line in textwrap.wrap(days, 30):
+            print(line)
+
+        print("")
+        print("Days in {}: {}".format(MONTHS[month - 1],
+                                      MONTH_NUMBER_OF_DAYS[month - 1]))
+        print("Show days in {}: {}\n".format(MONTHS[month -1],
+                                             len(regular_show_dates[month])))
+
 
     return None
 
